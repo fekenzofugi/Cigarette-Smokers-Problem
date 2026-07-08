@@ -56,27 +56,55 @@ sem_t mesa_livre_semaphore; // 0 = mesa ocupada, 1 = mesa livre controla quando 
 sem_t fumante_semaphore[N_FUMANTES]; // um para cada fumante 
 sem_t estados_semaphore; // 0 = estados locked 1 = estados livres controla o estado global -> Mutex Lock
 
-void gerar_cena() {
+void gerar_cena(int temIngrediente) {
     int i;
-    int id_agente = 0;
     printf("=================== BARZINHO DOS FUMANTES ===================\n");
     printf("Rodada: %2d/%d\n", rodada_atual, RODADAS);
 
-    printf("Agente: %s\n", estado_age[0] == DISTRIBUINDO ? "distribuindo ingredientes" : "aguardando fumante");
-
-    printf("Mesa:   ");
-    if (estado_age[id_agente] == DISTRIBUINDO || fumante_atual == -1) {
-    printf("[ %s ] [ %s ]\n", nomeIngrediente[ingredientes_na_mesa[0]], nomeIngrediente[ingredientes_na_mesa[1]]);
-    } else {
-    printf("[ vazia  ] [ vazia  ]\n");
-    }
-
-    printf("\nFumantes:\n");
-    for (i = 0; i < N_FUMANTES; i++) {
-    printf("  Fumante %d (tem %s): %s\n", i, nomeIngrediente[i],
-            estado_fum[i] == FUMANDO ? "🚬" : "esperando ingredientes");
-    }
-    return;
+    printf("\n╔════════════════════════════════════════════════════════════════════════╗\n");
+    printf  ("║                                 Agente                                 ║\n");
+    printf  ("║                ╔══════════════════════════════════════╗                ║\n");
+    printf  ("║                ║                  ");
+    if(temIngrediente){
+        for(int i = 0; i < 2; i++){
+            if(ingredientes_na_mesa[i] == 0)
+                printf("🍂");
+            else if(ingredientes_na_mesa[i] == 1)
+                printf("📜");
+            else if(ingredientes_na_mesa[i] == 2)
+                printf("🔥");
+        }
+    } else
+        printf("    ");
+    printf  ("                ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║                                      ║                ║\n");
+    printf  ("║                ║");
+    if (estado_fum[0] == FUMANDO)
+        printf("  🚬  ");
+    else
+        printf("🍂    ");
+    printf("          ");
+    if (estado_fum[1] == FUMANDO)
+        printf("  🚬  ");
+    else
+        printf("  📜  ");
+    printf("          ");
+    if (estado_fum[2] == FUMANDO)
+        printf("  🚬  ");
+    else
+        printf("    🔥");
+    printf  ("║                ║\n");
+    printf  ("║                ╚══════════════════════════════════════╝                ║\n");
+    printf  ("║                Fumante 1      Fumante 2       Fumante 3                ║\n");
+    printf  ("╚════════════════════════════════════════════════════════════════════════╝\n");
 }
 
 void *f_agente(void *v) {
@@ -102,7 +130,7 @@ void *f_agente(void *v) {
             }
         }
 
-        gerar_cena(); // imprime cena atualizada
+        gerar_cena(1); // imprime cena atualizada
 
         estado_age[agent_id] = AGUARDANDO_FUMANTES; // troca estado do agente
 
@@ -124,7 +152,7 @@ void *f_fumante(void *v) {
         estado_fum[id] = FUMANDO;
 
         // FUMANTE pegou os ingredientes e montou o cigarro
-        gerar_cena();
+        gerar_cena(0);
         sem_post(&estados_semaphore); // UNLOCK
 
         sleep(2); // fumando o cigarro
@@ -133,7 +161,7 @@ void *f_fumante(void *v) {
         estado_fum[id] = ESPERANDO;
 
         // FUMANTE acabou o cigarro
-        gerar_cena();
+        gerar_cena(0);
         sem_post(&estados_semaphore); //UNLOCK
 
         // Libera mesa
