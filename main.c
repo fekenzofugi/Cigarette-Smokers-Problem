@@ -95,37 +95,35 @@ void gerar_cena() {
 void *f_agente(void *v) {
     int agent_id = 0;
     int ingrediente1, ingrediente2;
+    int rodada;
 
-    for (rodada_atual = 1; rodada_atual <= RODADAS; rodada_atual++) {
-        sem_wait(&mesa_livre_semaphore); // espera mesa livre
+    for (rodada = 1; rodada <= RODADAS; rodada++) {
+        sem_wait(&mesa_livre_semaphore);
 
-        sleep(1); // agente prepara os ingredientes
+        sleep(1);
 
         ingrediente1 = random() % N_FUMANTES;
-        ingrediente2 = ingrediente1; // inicializa
+        ingrediente2 = ingrediente1;
         while (ingrediente2 == ingrediente1) {
             ingrediente2 = random() % N_FUMANTES;
         }
 
-        sem_wait(&estados_semaphore); // LOCK trava por dentro para alterar variáveis globais
+        sem_wait(&estados_semaphore);
+        rodada_atual = rodada;
         estado_age[agent_id] = DISTRIBUINDO;
 
-        // adiciona ingredientes na mesa
         mesa[0] = ingrediente1;
         mesa[1] = ingrediente2;
 
-        // marca os dois ingredientes sorteados como presentes na mesa
         ingredientes_presentes[ingrediente1] = 1;
         ingredientes_presentes[ingrediente2] = 1;
 
         gerar_cena();
 
-        estado_age[agent_id] = AGUARDANDO_FUMANTES; // troca estado do agente
+        estado_age[agent_id] = AGUARDANDO_FUMANTES;
 
-        sem_post(&estados_semaphore); // UNLOCK
+        sem_post(&estados_semaphore);
 
-        // Alerta os 3 combinadores -> cada um checa em paralelo se o seu par está completo
-        // e é ele quem decide (e acorda) o fumante correspondente, não o agente
         int i;
         for (i = 0; i < N_COMBINADORES; i++) {
             sem_post(&combinador_semaphore[i]);
