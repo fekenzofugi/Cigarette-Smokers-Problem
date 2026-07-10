@@ -50,18 +50,18 @@ typedef enum {
 estado_fumante estado_fum[N_FUMANTES];
 estado_agente estado_age[N_AGENTES];
 
-// Variáveis Globais - ao trabalhar com threds um dos maiores problemas são as condições de corrida, onde diferentes threads tentam acessar tais variáveis globais. Protegidas por estados_semaphore
-int mesa[2]; // 0-TABACO, 1-PAPEL, 2-FOSFORO
-int fumante_atual = -1; // nenhum deles
+// Variáveis Globais - protegidas por estados_semaphore
+int mesa[2]; 
+int fumante_atual = -1; // apenas para exibição em gerar_cena()
 int rodada_atual = 0;
 
-int ingredientes_presentes[N_FUMANTES]; // ingredientes_presentes[TABACO_I] == 1 significa que o ingrediente Tabaco está sobre mesa nom momento 
+int ingredientes_presentes[N_FUMANTES]; // ingredientes_presentes[TABACO] == 1 significa que o ingrediente Tabaco está sobre a mesa no momento
 
 // semaphores
-sem_t mesa_livre_semaphore; // 0 = mesa ocupada, 1 = mesa livre controla quando o agente pode distribuir os ingredientes novamente
+sem_t mesa_livre_semaphore; // 0 = mesa ocupada, 1 = mesa livre. controla quando o agente pode distribuir os ingredientes novamente
 sem_t fumante_semaphore[N_FUMANTES]; // um para cada fumante 
-sem_t estados_semaphore; // 0 = estados locked 1 = estados livres controla o estado global -> Mutex Lock
-sem_t alerta_combinador_semaphore[N_COMBINADORES]; // um para cada combinador. alerta_combinador_semaphore[0] == 1 agente ativa esse semaphore quando Tabaco esta na mesa, agente toca toda rodada para todos os combinadores e cada combinador ao acordar ira verificar em paralelo se o seu par de ingredientes esta ativo
+sem_t estados_semaphore; // 0 = estados locked, 1 = estados livres. controla o estado global -> Mutex Lock
+sem_t alerta_combinador_semaphore[N_COMBINADORES]; // um para cada combinador. o agente ativa os 3 a cada rodada e cada combinador, ao acordar, verifica em paralelo se o seu par de ingredientes está presente na mesa
 
 int combinacoes[N_COMBINADORES][3] = {
     {TABACO, PAPEL,   FOSFORO},
@@ -98,11 +98,12 @@ void *f_agente(void *v) {
 
     for (rodada_atual = 1; rodada_atual <= RODADAS; rodada_atual++) {
         sem_wait(&mesa_livre_semaphore); // espera mesa livre
-        
+
         sleep(1); // agente prepara os ingredientes
-        
-        ingrediente1 = random() % N_FUMANTES; // em vez de sortear dois ingredientes e depois descobrir qual fumante serve, o agente ja escolhe o fumante
-        while (ingrediente1 == ingrediente2) {
+
+        ingrediente1 = random() % N_FUMANTES;
+        ingrediente2 = ingrediente1; // inicializa
+        while (ingrediente2 == ingrediente1) {
             ingrediente2 = random() % N_FUMANTES;
         }
 
@@ -113,7 +114,9 @@ void *f_agente(void *v) {
         mesa[0] = ingrediente1;
         mesa[1] = ingrediente2;
 
-        fumante_atual = (TABACO + PAPEL + FOSFORO) - ingrediente1 - ingrediente2;
+        // marca os dois ingredientes sorteados como presentes na mesa
+        ingredientes_presentes[ingrediente1] = 1;
+        ingredientes_presentes[ingrediente2] = 1;
 
         gerar_cena();
 
@@ -121,10 +124,8 @@ void *f_agente(void *v) {
 
         sem_post(&estados_semaphore); // UNLOCK
 
-        // Acorda o fumante que consegue montar o cigarro completo
-        sem_post(&fumante_semaphore[fumante_atual]);
-
-        // Alerta os 3 combinadores -> Cada combinador ira checar se o seu par esta completo
+        // Alerta os 3 combinadores -> cada um checa em paralelo se o seu par está completo
+        // e é ele quem decide (e acorda) o fumante correspondente, não o agente
         int i;
         for (i = 0; i < N_COMBINADORES; i++) {
             sem_post(&alerta_combinador_semaphore[i]);
@@ -143,11 +144,11 @@ void *f_combinador(void *v) {
         sem_wait(&alerta_combinador_semaphore[ultimo_ingrediente]);
         sem_wait(&estados_semaphore); // lock
 
-        if (ingredientes_presentes[ingrediente1] && ingredientes_presentes[ingrediente2]) { // checa se ingredientes estao presentes na mesa
+        if (ingredientes_presentes[ingrediente1] && ingredientes_presentes[ingrediente2]) { // checa se os dois ingredientes do seu par estão na mesa
             ingredientes_presentes[ingrediente1] = 0;
             ingredientes_presentes[ingrediente2] = 0;
             sem_post(&estados_semaphore);
-            sem_post(&fumante_semaphore[ultimo_ingrediente]);
+            sem_post(&fumante_semaphore[ultimo_ingrediente]); // acorda o fumante que tinha o terceiro ingrediente
         } else {
             sem_post(&estados_semaphore); // unlock
         }
@@ -163,12 +164,13 @@ void *f_fumante(void *v) {
         sem_wait(&estados_semaphore); // LOCK
 
         estado_fum[id] = FUMANDO;
+        fumante_atual = id;
 
         // FUMANTE pegou os ingredientes e montou o cigarro
         gerar_cena();
         sem_post(&estados_semaphore); // UNLOCK
 
-        sleep(2); // fumando o cigarro
+        sleep(1.5); // fumando o cigarro
 
         sem_wait(&estados_semaphore); // LOCK
         estado_fum[id] = ESPERANDO;
@@ -191,8 +193,8 @@ int main() {
     int id_agente = 0;
 
     // Semaphores globais
-    sem_init(&mesa_livre_semaphore, 0, 1); // 0 = semaphore é compartilhado entre threads do mesmo processo, 1 = mesa livre
-    sem_init(&estados_semaphore, 0, 1); // 0 = semaphore é compartilhado entre threads do mesmo processo, 1 = mesa livre
+    sem_init(&mesa_livre_semaphore, 0, 1); // 0 = semaphore compartilhado entre threads do mesmo processo, 1 = mesa livre
+    sem_init(&estados_semaphore, 0, 1); // 0 = semaphore compartilhado entre threads do mesmo processo, 1 = livre
 
     estado_age[0] = AGUARDANDO_FUMANTES;
 
@@ -208,7 +210,7 @@ int main() {
         ingredientes_presentes[i] = 0;
     }
 
-    // Semaforos de "campainha" dos pushers, comecam travados: so
+    // Semaforos de "campainha" dos combinadores, começam travados: só
     // acordam quando o agente faz o broadcast no fim de cada rodada
     for (i = 0; i < N_COMBINADORES; i++) {
         sem_init(&alerta_combinador_semaphore[i], 0, 0);
@@ -216,13 +218,13 @@ int main() {
 
     // Cria 3 threads para cada combinador
     for (i = 0; i < N_COMBINADORES; i++) {
-        pthread_create(&thread_combinadores[i], NULL, f_combinador, (void *) & combinacoes[i]);
+        pthread_create(&thread_combinadores[i], NULL, f_combinador, (void *) &combinacoes[i]);
     }
 
     // Cria 3 threads para cada fumante
     for (i = 0; i < N_FUMANTES; i++) {
         ids_fumantes[i] = i; // guarda id
-        pthread_create(&thread_fumantes[i], NULL, f_fumante, (void *) &ids_fumantes[i]); // (void *) &ids_fumantes[i] será lido em f_fumante
+        pthread_create(&thread_fumantes[i], NULL, f_fumante, (void *) &ids_fumantes[i]);
     }
 
     // Cria 1 thread para agente
