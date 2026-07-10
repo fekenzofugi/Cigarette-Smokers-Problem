@@ -75,7 +75,7 @@ void gerar_cena() {
     printf("=================== BARZINHO DOS FUMANTES ===================\n");
     printf("Rodada: %2d/%d\n", rodada_atual, RODADAS);
 
-    printf("Agente: %s\n", estado_age[0] == DISTRIBUINDO ? "distribuindo" : "aguardando");
+    printf("Agente: %s\n", estado_age[0] == DISTRIBUINDO ? "distribuindo" : "😴");
 
     printf("Mesa:   ");
     if (estado_age[id_agente] == DISTRIBUINDO || fumante_atual == -1) {
@@ -87,7 +87,7 @@ void gerar_cena() {
     printf("\nFumantes:\n");
     for (i = 0; i < N_FUMANTES; i++) {
         printf("  Fumante %d (tem %s): %s\n", i, nomeIngrediente[i],
-        estado_fum[i] == FUMANDO ? "🚬" : "esperando");
+        estado_fum[i] == FUMANDO ? "🚬" : "😴");
     }
     return;
 }
